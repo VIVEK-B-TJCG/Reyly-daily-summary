@@ -127,6 +127,22 @@
   .tasks-btn:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(245,158,11,0.4); }
   .tasks-btn.active { background: linear-gradient(180deg, #fbbf24, #f59e0b); }
 
+  .refresh-btn {
+    background: linear-gradient(180deg, #7c6ff7, #6d5fe6);
+    color: white; border: none; border-radius: 8px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
+    transition: all 0.2s;
+    display: flex; align-items: center; gap: 6px;
+    box-shadow: 0 2px 8px rgba(124,111,247,0.25);
+  }
+  .refresh-btn:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(124,111,247,0.4); }
+  .refresh-btn:disabled { opacity: 0.6; cursor: wait; }
+  .refresh-btn.spinning { animation: pulseGlow 1.4s ease-in-out infinite; }
+  @keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 2px 8px rgba(124,111,247,0.4); }
+    50% { box-shadow: 0 4px 20px rgba(124,111,247,0.8); }
+  }
+
   /* TASK TRACKER */
   .tasks-page { max-width: 1200px; margin: 0 auto; padding: 24px; }
   .tasks-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
@@ -1160,6 +1176,14 @@
   <button class="tasks-btn" id="tasksBtn" onclick="showTasks()" style="display:none">
     📋 Tasks
   </button>
+  <button class="refresh-btn" id="refreshBtn" onclick="refreshFromDrive()" title="Fetch new meeting summaries from Google Drive and push to GitHub. Vercel then auto-redeploys.">
+    🔄 Refresh
+  </button>
+</div>
+
+<!-- Toast for refresh status -->
+<div id="refreshToast" style="display:none;position:fixed;top:70px;right:20px;z-index:9999;max-width:420px;background:linear-gradient(135deg,#1e293b,#0f172a);border:1px solid #334155;border-radius:12px;padding:16px 20px;box-shadow:0 8px 24px rgba(0,0,0,0.4);color:#f1f5f9;font-size:13px;line-height:1.5;">
+  <div id="refreshToastBody"></div>
 </div>
 
 <div class="main">
@@ -1255,6 +1279,50 @@ async function autoLoad() {
 
 // Kick off on page load
 window.addEventListener('DOMContentLoaded', autoLoad);
+
+// --- Refresh button — calls /api/refresh serverless function ---
+async function refreshFromDrive() {
+  const btn = document.getElementById('refreshBtn');
+  const toast = document.getElementById('refreshToast');
+  const body = document.getElementById('refreshToastBody');
+  btn.disabled = true;
+  btn.classList.add('spinning');
+  btn.textContent = '⏳ Fetching...';
+  showToast('⏳ <strong>Fetching new meetings from Google Drive...</strong><br><span style="opacity:0.7">This can take up to 60 seconds.</span>');
+
+  try {
+    const res = await fetch('/api/refresh', { method: 'POST' });
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || `HTTP ${res.status}`);
+    }
+
+    if (data.added && data.added.length > 0) {
+      body.innerHTML = `✅ <strong>Added ${data.added.length} meeting${data.added.length > 1 ? 's' : ''}:</strong><br>${data.added.map(d => `&nbsp;• ${d}`).join('<br>')}<br><br><span style="opacity:0.7">Vercel is redeploying — page will reload in 30s.</span>`;
+      setTimeout(() => window.location.reload(), 30000);
+    } else {
+      body.innerHTML = `✨ <strong>All up to date</strong><br><span style="opacity:0.7">${data.message || 'No new meetings in Drive.'}</span>`;
+      setTimeout(hideToast, 5000);
+    }
+  } catch (e) {
+    body.innerHTML = `⚠️ <strong>Refresh failed</strong><br><span style="color:#f87171;font-family:monospace;font-size:11px">${escapeHtml(e.message)}</span><br><br><span style="opacity:0.7">Check Vercel function logs or env-var setup.</span>`;
+    setTimeout(hideToast, 12000);
+  } finally {
+    btn.disabled = false;
+    btn.classList.remove('spinning');
+    btn.textContent = '🔄 Refresh';
+  }
+}
+
+function showToast(html) {
+  const toast = document.getElementById('refreshToast');
+  document.getElementById('refreshToastBody').innerHTML = html;
+  toast.style.display = 'block';
+}
+function hideToast() {
+  document.getElementById('refreshToast').style.display = 'none';
+}
 
 function updateTopbarStats() {
   const total = allFiles.length;
