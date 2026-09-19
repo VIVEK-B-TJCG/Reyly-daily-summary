@@ -1176,7 +1176,7 @@
   <button class="tasks-btn" id="tasksBtn" onclick="showTasks()" style="display:none">
     📋 Tasks
   </button>
-  <button class="refresh-btn" id="refreshBtn" onclick="refreshFromDrive()" title="Fetch new meeting summaries from Google Drive and push to GitHub. Vercel then auto-redeploys.">
+  <button class="refresh-btn" id="refreshBtn" onclick="refreshFromDrive()" title="Hard-reload the site to pull the latest summaries (the 2 AM IST auto-sync pushes new meetings each night — click this if you want the latest without waiting for browser cache to expire).">
     🔄 Refresh
   </button>
 </div>
@@ -1280,39 +1280,22 @@ async function autoLoad() {
 // Kick off on page load
 window.addEventListener('DOMContentLoaded', autoLoad);
 
-// --- Refresh button — calls /api/refresh serverless function ---
-async function refreshFromDrive() {
+// --- Refresh button — hard reload with cache bypass ---
+// The scheduled Claude routine pushes new meetings to GitHub at 2 AM IST.
+// This button just forces the browser to reload the site + skip cache so
+// users see whatever was pushed since their last visit.
+function refreshFromDrive() {
   const btn = document.getElementById('refreshBtn');
-  const toast = document.getElementById('refreshToast');
-  const body = document.getElementById('refreshToastBody');
   btn.disabled = true;
   btn.classList.add('spinning');
-  btn.textContent = '⏳ Fetching...';
-  showToast('⏳ <strong>Fetching new meetings from Google Drive...</strong><br><span style="opacity:0.7">This can take up to 60 seconds.</span>');
-
-  try {
-    const res = await fetch('/api/refresh', { method: 'POST' });
-    const data = await res.json();
-
-    if (!res.ok) {
-      throw new Error(data.error || `HTTP ${res.status}`);
-    }
-
-    if (data.added && data.added.length > 0) {
-      body.innerHTML = `✅ <strong>Added ${data.added.length} meeting${data.added.length > 1 ? 's' : ''}:</strong><br>${data.added.map(d => `&nbsp;• ${d}`).join('<br>')}<br><br><span style="opacity:0.7">Vercel is redeploying — page will reload in 30s.</span>`;
-      setTimeout(() => window.location.reload(), 30000);
-    } else {
-      body.innerHTML = `✨ <strong>All up to date</strong><br><span style="opacity:0.7">${data.message || 'No new meetings in Drive.'}</span>`;
-      setTimeout(hideToast, 5000);
-    }
-  } catch (e) {
-    body.innerHTML = `⚠️ <strong>Refresh failed</strong><br><span style="color:#f87171;font-family:monospace;font-size:11px">${escapeHtml(e.message)}</span><br><br><span style="opacity:0.7">Check Vercel function logs or env-var setup.</span>`;
-    setTimeout(hideToast, 12000);
-  } finally {
-    btn.disabled = false;
-    btn.classList.remove('spinning');
-    btn.textContent = '🔄 Refresh';
-  }
+  btn.textContent = '🔄 Reloading...';
+  showToast('🔄 <strong>Reloading latest summaries...</strong>');
+  // Cache-bust: force a fresh manifest.json + md fetch by adding a random query param
+  // to the URL, then hard-reload.
+  setTimeout(() => {
+    const bust = '?v=' + Date.now();
+    window.location.href = window.location.pathname + bust;
+  }, 300);
 }
 
 function showToast(html) {
